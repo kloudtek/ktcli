@@ -53,7 +53,7 @@ public class CliHelper {
     private final CommandLine commandLine;
     private CommandLine.Help.Ansi ansi = CommandLine.Help.Ansi.AUTO;
 
-    public static void staticInit() {
+    static {
         objectMapper = new ObjectMapper();
         objectMapper.setDefaultPrettyPrinter(new DefaultPrettyPrinter());
         objectMapper.disable(MapperFeature.AUTO_DETECT_CREATORS,

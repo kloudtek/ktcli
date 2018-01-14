@@ -345,7 +345,7 @@ public class CliHelper {
         } catch (Exception e) {
             // that's fine, we only want the basic options
         }
-        if (configFile != null) {
+        if (cliHelper.configFile != null) {
             configFile = cliHelper.configFile;
         }
         setupLogging(cliHelper);

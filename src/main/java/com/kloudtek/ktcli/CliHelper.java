@@ -2,10 +2,7 @@ package com.kloudtek.ktcli;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -56,10 +53,14 @@ public class CliHelper {
                 MapperFeature.AUTO_DETECT_GETTERS,
                 MapperFeature.AUTO_DETECT_IS_GETTERS);
         objectMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         console = System.console();
         if (console == null) {
             scanner = new Scanner(System.in);
         }
+    }
+
+    protected CliHelper() {
     }
 
     public CliHelper(CliCommand<?> command) {
@@ -123,11 +124,7 @@ public class CliHelper {
      */
     public void initAndRun(String... args) {
         try {
-            parseBasicOptions(args);
-            loadConfigFile();
-            setupLogging();
-            executeCommand(args);
-            writeConfig();
+            initAndRunNoExceptionHandling(args);
         } catch (Exception e) {
             if (e instanceof CommandLine.ExecutionException) {
                 System.out.println(((CommandLine.ExecutionException) e).getCommandLine().getCommandName() + " : " + e.getCause().getMessage());
@@ -139,6 +136,14 @@ public class CliHelper {
             }
             System.exit(-1);
         }
+    }
+
+    public void initAndRunNoExceptionHandling(String... args) {
+        parseBasicOptions(args);
+        loadConfigFile();
+        setupLogging();
+        executeCommand(args);
+        writeConfig();
     }
 
     public void executeCommand(String... args) throws CommandLine.ExecutionException {
@@ -323,11 +328,14 @@ public class CliHelper {
     }
 
     public void parseBasicOptions(@NotNull String... args) {
+        CliHelper cliHelper = new CliHelper();
         try {
-            commandLine.parse(args);
+            CommandLine cl = new CommandLine(cliHelper);
+            cl.parse(args);
         } catch (Exception e) {
             // that's fine, we only want the basic options
         }
+        configFile = cliHelper.configFile;
     }
 
     public boolean isQuiet() {

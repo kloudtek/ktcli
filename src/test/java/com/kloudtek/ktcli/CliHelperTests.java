@@ -7,11 +7,8 @@ import picocli.CommandLine;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.io.StringWriter;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class CliHelperTests {
     public static final String SOMEVAL = "fsad8ofjsodafj";
@@ -38,7 +35,7 @@ class CliHelperTests {
         TestCmdWithRequireField cmd = new TestCmdWithRequireField();
         cmd.someval = SOMEVAL;
         CliHelper cliHelper = new CliHelper(cmd);
-        cliHelper.initAndRun();
+        cliHelper.initAndRunNoExceptionHandling();
         ByteArrayOutputStream tmp = new ByteArrayOutputStream();
         cliHelper.getCommandLine().usage(new PrintStream(tmp));
         tmp.close();

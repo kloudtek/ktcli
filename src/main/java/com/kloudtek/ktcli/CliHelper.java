@@ -117,7 +117,7 @@ public class CliHelper {
     // Initialization and Execution
 
     /**
-     * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()}, {@link #setupLogging()},
+     * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()},
      * {@link #executeCommand(String[])}, {@link #writeConfig()}. If an exception occurs, it will print it and call System.exit(-1).
      *
      * @param args Arguments
@@ -138,10 +138,15 @@ public class CliHelper {
         }
     }
 
+    /**
+     * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()},
+     * {@link #executeCommand(String[])}, {@link #writeConfig()}.
+     *
+     * @param args Arguments
+     */
     public void initAndRunNoExceptionHandling(String... args) {
         parseBasicOptions(args);
         loadConfigFile();
-        setupLogging();
         executeCommand(args);
         writeConfig();
     }
@@ -168,10 +173,10 @@ public class CliHelper {
         }
     }
 
-    public void setupLogging() {
-        if (verbose) {
+    public void setupLogging(CliHelper cliHelper) {
+        if (cliHelper.verbose) {
             VerySimpleLogger.LOGLEVEL = LocationAwareLogger.DEBUG_INT;
-        } else if (quiet) {
+        } else if (cliHelper.quiet) {
             VerySimpleLogger.LOGLEVEL = LocationAwareLogger.ERROR_INT;
         } else {
             VerySimpleLogger.LOGLEVEL = LocationAwareLogger.INFO_INT;
@@ -327,6 +332,11 @@ public class CliHelper {
         }
     }
 
+    /**
+     * Parses basic options to get config file, and sets up logging based on appropriate flags
+     *
+     * @param args arguments
+     */
     public void parseBasicOptions(@NotNull String... args) {
         CliHelper cliHelper = new CliHelper();
         try {
@@ -335,7 +345,10 @@ public class CliHelper {
         } catch (Exception e) {
             // that's fine, we only want the basic options
         }
-        configFile = cliHelper.configFile;
+        if (configFile != null) {
+            configFile = cliHelper.configFile;
+        }
+        setupLogging(cliHelper);
     }
 
     public boolean isQuiet() {

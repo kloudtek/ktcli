@@ -51,7 +51,7 @@ class CliHelperTests {
         cliHelper.parseBasicOptions();
         cmd.password = MYPASSWORD;
         cliHelper.loadConfigFile();
-        cliHelper.setupLogging();
+        cliHelper.setupLogging(cliHelper);
         cliHelper.executeCommand();
         ByteArrayOutputStream tmp = new ByteArrayOutputStream();
         cliHelper.getCommandLine().usage(new PrintStream(tmp));

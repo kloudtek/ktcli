@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.kloudtek.util.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import picocli.CommandLine;
@@ -38,7 +39,7 @@ public class CliHelper {
     @Option(names = {"-p", "--profile"}, description = "Configuration profile")
     private String profile;
     @Option(names = {"-c", "--config"}, description = "Configuration File")
-    private File configFile = new File(System.getProperty("user.home") + File.separator + ".devmagic");
+    private File configFile;
     protected ObjectNode config;
     private ObjectNode profileConfig;
     private static ObjectMapper objectMapper;
@@ -65,7 +66,12 @@ public class CliHelper {
     public CliHelper(CliCommand<?> command) {
         this.command = command;
         commandLine = new CommandLine(command);
+        if( commandLine.getCommandName().equals("<main class>") ) {
+            throw new IllegalArgumentException("Command class "+command.getClass().getName()+" must be annotated with @Command and must have a name specified");
+        }
         commandLine.addMixin("cliHelper", this);
+        configFile = new File(System.getProperty("user.home") + File.separator + "."+commandLine.getCommandName());
+        commandLine.getCommandSpec().optionsMap().get("-c").defaultValue(configFile);
     }
 
     // Configuration functions
@@ -87,6 +93,7 @@ public class CliHelper {
                 profile = DEFAULT;
                 profileConfig = config.putObject(PROFILES).putObject(DEFAULT);
             }
+            commandLine.getCommandSpec().optionsMap().get("-p").defaultValue(profile);
         } catch (IOException e) {
             throw new UserDisplayableException("Unable to read configuration file: " + e.getMessage(), e);
         }

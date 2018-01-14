@@ -29,7 +29,7 @@ class CliHelperTests {
         TestCmdWithRequireField cmd = new TestCmdWithRequireField();
         cmd.someval = SOMEVAL;
         CliHelper cliHelper = new CliHelper(cmd);
-        cliHelper.executeCommand();
+        cliHelper.initAndRun();
         ByteArrayOutputStream tmp = new ByteArrayOutputStream();
         cliHelper.getCommandLine().usage(new PrintStream(tmp));
         tmp.close();

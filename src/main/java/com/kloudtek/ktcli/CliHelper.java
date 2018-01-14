@@ -9,15 +9,13 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.kloudtek.util.StringUtils;
-import com.sun.xml.internal.ws.spi.db.FieldGetter;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import picocli.CommandLine;
-import picocli.CommandLine.Option;
 import com.kloudtek.ktcli.util.VerySimpleLogger;
 import com.kloudtek.util.UserDisplayableException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.spi.LocationAwareLogger;
+import picocli.CommandLine;
+import picocli.CommandLine.Option;
 
 import java.io.Console;
 import java.io.File;
@@ -67,11 +65,11 @@ public class CliHelper {
     public CliHelper(CliCommand<?> command) {
         this.command = command;
         commandLine = new CommandLine(command);
-        if( commandLine.getCommandName().equals("<main class>") ) {
-            throw new IllegalArgumentException("Command class "+command.getClass().getName()+" must be annotated with @Command and must have a name specified");
+        if (commandLine.getCommandName().equals("<main class>")) {
+            throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command and must have a name specified");
         }
         commandLine.addMixin("cliHelper", this);
-        configFile = new File(System.getProperty("user.home") + File.separator + "."+commandLine.getCommandName());
+        configFile = new File(System.getProperty("user.home") + File.separator + "." + commandLine.getCommandName());
         commandLine.getCommandSpec().optionsMap().get("-c").defaultValue(configFile);
     }
 
@@ -197,7 +195,7 @@ public class CliHelper {
                 }
                 List<CommandLine.ArgSpec> reqArgs = cliCmd.commandLine.getCommandSpec().requiredArgs();
                 for (CommandLine.ArgSpec argSpec : new ArrayList<>(reqArgs)) {
-                    if( argSpec.getter().get() != null ) {
+                    if (argSpec.getter().get() != null) {
                         reqArgs.remove(argSpec);
                         argSpec.required(false);
                     }

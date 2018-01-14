@@ -65,13 +65,6 @@ public class CliHelper {
 
     public CliHelper(CliCommand<?> command) {
         this.command = command;
-        commandLine = new CommandLine(command);
-        if (commandLine.getCommandName().equals("<main class>")) {
-            throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command and must have a name specified");
-        }
-        commandLine.addMixin("cliHelper", this);
-        configFile = new File(System.getProperty("user.home") + File.separator + "." + commandLine.getCommandName());
-        commandLine.getCommandSpec().optionsMap().get("-c").defaultValue(configFile);
     }
 
     // Configuration functions
@@ -118,7 +111,7 @@ public class CliHelper {
 
     /**
      * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()},
-     * {@link #executeCommand(String[])}, {@link #writeConfig()}. If an exception occurs, it will print it and call System.exit(-1).
+     * {@link #parseAndExecute(String[])}, {@link #writeConfig()}. If an exception occurs, it will print it and call System.exit(-1).
      *
      * @param args Arguments
      */
@@ -140,18 +133,26 @@ public class CliHelper {
 
     /**
      * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()},
-     * {@link #executeCommand(String[])}, {@link #writeConfig()}.
+     * {@link #parseAndExecute(String[])}, {@link #writeConfig()}.
      *
      * @param args Arguments
      */
     public void initAndRunNoExceptionHandling(String... args) {
         parseBasicOptions(args);
         loadConfigFile();
-        executeCommand(args);
+        parseAndExecute(args);
         writeConfig();
     }
 
-    public void executeCommand(String... args) throws CommandLine.ExecutionException {
+    public void parseAndExecute(String... args) throws CommandLine.ExecutionException {
+        commandLine = new CommandLine(command);
+        if (commandLine.getCommandName().equals("<main class>")) {
+            throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command and must have a name specified");
+        }
+        if (configFile == null) {
+            configFile = new File(System.getProperty("user.home") + File.separator + "." + commandLine.getCommandName());
+        }
+        commandLine.addMixin("cliHelper", this);
         init(commandLine, null, profileConfig);
         List<CommandLine> parsedCmdLines = commandLine.parse(args);
         if (CommandLine.printHelpIfRequested(parsedCmdLines, System.out, ansi)) {

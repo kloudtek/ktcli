@@ -52,7 +52,7 @@ class CliHelperTests {
         cmd.password = MYPASSWORD;
         cliHelper.loadConfigFile();
         cliHelper.setupLogging(cliHelper);
-        cliHelper.executeCommand();
+        cliHelper.parseAndExecute();
         ByteArrayOutputStream tmp = new ByteArrayOutputStream();
         cliHelper.getCommandLine().usage(new PrintStream(tmp));
         tmp.close();

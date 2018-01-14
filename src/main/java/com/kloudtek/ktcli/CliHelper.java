@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kloudtek.util.StringUtils;
+import com.sun.xml.internal.ws.spi.db.FieldGetter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import picocli.CommandLine;
@@ -46,7 +47,7 @@ public class CliHelper {
     private static Console console;
     private static Scanner scanner;
     private CliCommand<?> command;
-    private final CommandLine commandLine;
+    private CommandLine commandLine;
     private CommandLine.Help.Ansi ansi = CommandLine.Help.Ansi.AUTO;
 
     static {
@@ -93,7 +94,9 @@ public class CliHelper {
                 profile = DEFAULT;
                 profileConfig = config.putObject(PROFILES).putObject(DEFAULT);
             }
-            commandLine.getCommandSpec().optionsMap().get("-p").defaultValue(profile);
+            // Reparsing the command to update defaults
+            commandLine = new CommandLine(command);
+            commandLine.addMixin("cliHelper", this);
         } catch (IOException e) {
             throw new UserDisplayableException("Unable to read configuration file: " + e.getMessage(), e);
         }
@@ -161,7 +164,6 @@ public class CliHelper {
             }
         }
     }
-
 
     public void setupLogging() {
         if (verbose) {

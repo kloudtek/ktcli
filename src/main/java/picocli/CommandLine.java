@@ -1,17 +1,19 @@
-package picocli;
-
 /*
-   This file is Copyright 2017 Remko Popma
+   Copyright 2017 Remko Popma
+
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
+
        http://www.apache.org/licenses/LICENSE-2.0
+
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
  */
+package picocli;
 
 import java.io.File;
 import java.io.FileReader;
@@ -579,7 +581,7 @@ public class CommandLine {
      * <p>
      * Something like this:</p>
      * <pre>
-     *     // RunLast implementation: print help if requested, otherwise initAndRun the most specific subcommand
+     *     // RunLast implementation: print help if requested, otherwise execute the most specific subcommand
      *     if (CommandLine.printHelpIfRequested(parsedCommands, System.err, Help.Ansi.AUTO)) {
      *         return emptyList();
      *     }
@@ -676,7 +678,7 @@ public class CommandLine {
      * The following handlers are available:</p>
      * <ul>
      *   <li>{@link RunLast} handler prints help if requested, and otherwise gets the last specified command or subcommand
-     * and tries to initAndRun it as a {@code Runnable} or {@code Callable}.</li>
+     * and tries to execute it as a {@code Runnable} or {@code Callable}.</li>
      *   <li>{@link RunFirst} handler prints help if requested, and otherwise executes the top-level command as a {@code Runnable} or {@code Callable}.</li>
      *   <li>{@link RunAll} handler prints help if requested, and otherwise executes all recognized commands and subcommands as {@code Runnable} or {@code Callable} tasks.</li>
      *   <li>{@link DefaultExceptionHandler} prints the error message followed by usage help</li>
@@ -717,7 +719,7 @@ public class CommandLine {
      * The following handlers are available:</p>
      * <ul>
      *   <li>{@link RunLast} handler prints help if requested, and otherwise gets the last specified command or subcommand
-     * and tries to initAndRun it as a {@code Runnable} or {@code Callable}.</li>
+     * and tries to execute it as a {@code Runnable} or {@code Callable}.</li>
      *   <li>{@link RunFirst} handler prints help if requested, and otherwise executes the top-level command as a {@code Runnable} or {@code Callable}.</li>
      *   <li>{@link RunAll} handler prints help if requested, and otherwise executes all recognized commands and subcommands as {@code Runnable} or {@code Callable} tasks.</li>
      *   <li>{@link DefaultExceptionHandler} prints the error message followed by usage help</li>
@@ -1394,6 +1396,12 @@ public class CommandLine {
          * @return whether this option should be excluded from the usage message
          */
         boolean hidden() default false;
+
+        /**
+         * If specified (non-empty string), usage will show this string rather than a specified default value when found
+         * @return mask string
+         */
+        String defaultValueMask() default "";
     }
     /**
      * <p>
@@ -1770,6 +1778,10 @@ public class CommandLine {
          * @return whether the default values for options and parameters should be shown in the description column */
         boolean showDefaultValues() default false;
 
+        /** Specify {@code true} If an option with a default value should automatically be made not required even if {@link Option#required()} is set to true. False by default.
+         * @return where default values will make the option always not required */
+        boolean notRequiredWithDefault() default false;
+
         /** Set the heading preceding the subcommands list. May contain embedded {@linkplain java.util.Formatter format specifiers}.
          * The default heading is {@code "Commands:%n"} (with a line break at the end).
          * @return the heading preceding the subcommands list
@@ -2126,6 +2138,7 @@ public class CommandLine {
             if (!commandSpec.isAbbreviateSynopsisInitialized() && cmd.abbreviateSynopsis()) { commandSpec.abbreviateSynopsis(cmd.abbreviateSynopsis()); }
             if (!commandSpec.isSortOptionsInitialized()        && !cmd.sortOptions())       { commandSpec.sortOptions(cmd.sortOptions()); }
             if (!commandSpec.isShowDefaultValuesInitialized()  && cmd.showDefaultValues())  { commandSpec.showDefaultValues(cmd.showDefaultValues()); }
+            if (!commandSpec.isNotRequiredWithDefaultInitialized() && cmd.notRequiredWithDefault())  { commandSpec.notRequiredWithDefault(cmd.notRequiredWithDefault()); }
             if (!commandSpec.isVersionProviderInitialized()    && cmd.versionProvider() != NoVersionProvider.class) {
                 commandSpec.versionProvider(DefaultFactory.createVersionProvider(factory, cmd.versionProvider()));
             }
@@ -2265,6 +2278,11 @@ public class CommandLine {
             result.splitRegex(option.split());
             result.hidden(option.hidden());
             result.converters(DefaultFactory.createConverter(factory, option.converter()));
+            Object defaultValue = getDefaultValue(scope, field);
+            if(defaultValue != null && !option.defaultValueMask().isEmpty()) {
+                defaultValue = option.defaultValueMask();
+            }
+            result.defaultValue(defaultValue);
             initCommon(result, scope, field);
             return result;
         }
@@ -2294,13 +2312,13 @@ public class CommandLine {
             result.splitRegex(parameters.split());
             result.hidden(parameters.hidden());
             result.converters(DefaultFactory.createConverter(factory, parameters.converter()));
+            result.defaultValue(getDefaultValue(scope, field));
             initCommon(result, scope, field);
             return result;
         }
         private static void initCommon(ArgSpec result, Object scope, Field field) {
             field.setAccessible(true);
             result.type(field.getType()); // field type
-            result.defaultValue(getDefaultValue(scope, field));
             result.withToString(abbreviate("field " + field.toGenericString()));
             result.getter(new FieldGetter(scope, field));
             result.setter(new FieldSetter(scope, field));
@@ -2408,6 +2426,9 @@ public class CommandLine {
         /** Constant Boolean holding the default setting for whether to show default values in the usage help message: <code>{@value}</code>.*/
         static final Boolean DEFAULT_SHOW_DEFAULT_VALUES = Boolean.FALSE;
 
+        /** Constant Boolean holding if an option with a default value should always be not required: <code>{@value}</code>.*/
+        static final Boolean DEFAULT_NOT_REQUIRED_WITH_DEFAULT = Boolean.FALSE;
+
         private final Map<String, CommandLine> commands = new LinkedHashMap<String, CommandLine>();
         private final Map<String, OptionSpec> optionsByNameMap = new LinkedHashMap<String, OptionSpec>();
         private final Map<Character, OptionSpec> posixOptionsByKeyMap = new LinkedHashMap<Character, OptionSpec>();
@@ -2431,6 +2452,7 @@ public class CommandLine {
         private Boolean abbreviateSynopsis;
         private Boolean sortOptions;
         private Boolean showDefaultValues;
+        private Boolean notRequiredWithDefault;
         private Character requiredOptionMarker;
         private String headerHeading;
         private String synopsisHeading;
@@ -2455,6 +2477,7 @@ public class CommandLine {
             abbreviateSynopsis =   (abbreviateSynopsis == null)   ? false : abbreviateSynopsis;
             requiredOptionMarker = (requiredOptionMarker == null) ? DEFAULT_REQUIRED_OPTION_MARKER : requiredOptionMarker;
             showDefaultValues =    (showDefaultValues == null)    ? false : showDefaultValues;
+            notRequiredWithDefault=(notRequiredWithDefault == null)? false : notRequiredWithDefault;
             synopsisHeading =      (synopsisHeading == null)      ? DEFAULT_SYNOPSIS_HEADING : synopsisHeading;
             commandListHeading =   (commandListHeading == null)   ? DEFAULT_COMMAND_LIST_HEADING : commandListHeading;
             separator =            (separator == null)            ? DEFAULT_SEPARATOR : separator;
@@ -2520,6 +2543,9 @@ public class CommandLine {
                 }
                 if (name.length() == 2 && name.startsWith("-")) { posixOptionsByKeyMap.put(name.charAt(1), option); }
             }
+            if( Boolean.TRUE.equals(notRequiredWithDefault) && option.defaultValue() != null ) {
+                option.required(false);
+            }
             if (option.required()) { requiredArgs.add(option); }
             return this;
         }
@@ -2559,6 +2585,7 @@ public class CommandLine {
             if (!isAbbreviateSynopsisInitialized() && mixin.abbreviateSynopsis()) { abbreviateSynopsis(mixin.abbreviateSynopsis()); }
             if (!isSortOptionsInitialized()        && !mixin.sortOptions())       { sortOptions(mixin.sortOptions()); }
             if (!isShowDefaultValuesInitialized()  && mixin.showDefaultValues())  { showDefaultValues(mixin.showDefaultValues()); }
+            if (!isNotRequiredWithDefaultInitialized()  && mixin.notRequiredWithDefault())  { notRequiredWithDefault(mixin.notRequiredWithDefault()); }
 
             for (Map.Entry<String, CommandLine> entry : mixin.subcommands().entrySet()) {
                 addSubcommand(entry.getKey(), entry.getValue());
@@ -2590,7 +2617,7 @@ public class CommandLine {
 
         /** Returns the list of required options and positional parameters configured for this command.
          * @return an immutable list of the required options and positional parameters for this command. */
-        public List<ArgSpec> requiredArgs() { return requiredArgs; }
+        public List<ArgSpec> requiredArgs() { return Collections.unmodifiableList(requiredArgs); }
 
         /** Returns the String to use as the program name in the synopsis line of the help message.
          * {@link #DEFAULT_COMMAND_NAME} by default, initialized from {@link Command#name()} if defined. */
@@ -2732,6 +2759,12 @@ public class CommandLine {
          * @return this CommandSpec for method chaining */
         public CommandSpec showDefaultValues(boolean newValue) {showDefaultValues = newValue; return this;}
 
+        /** Returns whether a default value should make an option always not required */
+        public Boolean notRequiredWithDefault() {return notRequiredWithDefault; }
+
+        /** Returns whether a default value should make an option always not required */
+        public CommandSpec notRequiredWithDefault(boolean newValue) {notRequiredWithDefault = newValue; return this; }
+
         /** Returns the optional heading preceding the subcommand list. Initialized from {@link Command#commandListHeading()}. {@code "Commands:%n"} by default. */
         public String commandListHeading() { return commandListHeading; }
 
@@ -2772,6 +2805,7 @@ public class CommandLine {
         boolean isAbbreviateSynopsisInitialized()   { return abbreviateSynopsis   != null && !CommandSpec.DEFAULT_ABBREVIATE_SYNOPSIS.equals(abbreviateSynopsis); }
         boolean isSortOptionsInitialized()          { return sortOptions          != null && !CommandSpec.DEFAULT_SORT_OPTIONS.equals(sortOptions); }
         boolean isShowDefaultValuesInitialized()    { return showDefaultValues    != null && !CommandSpec.DEFAULT_SHOW_DEFAULT_VALUES.equals(showDefaultValues); }
+        boolean isNotRequiredWithDefaultInitialized(){ return notRequiredWithDefault    != null && !CommandSpec.DEFAULT_NOT_REQUIRED_WITH_DEFAULT.equals(notRequiredWithDefault); }
         boolean isVersionProviderInitialized()      { return versionProvider      != null && !(versionProvider instanceof NoVersionProvider);}
         boolean isVersionInitialized()              { return !empty(version); }
         boolean isCustomSynopsisInitialized()       { return !empty(customSynopsis); }
@@ -4265,7 +4299,7 @@ public class CommandLine {
          * on the specified class and superclasses.
          * @param command the annotated object to create usage help for
          * @param colorScheme the color scheme to use
-         * @deprecated use {@link CommandLine.Help#Help(CommandLine.CommandSpec, CommandLine.Help.ColorScheme)}  */
+         * @deprecated use {@link picocli.CommandLine.Help#Help(picocli.CommandLine.CommandSpec, picocli.CommandLine.Help.ColorScheme)}  */
         public Help(Object command, ColorScheme colorScheme) {
             this(CommandSpecBuilder.build(command, new DefaultFactory()), colorScheme);
         }

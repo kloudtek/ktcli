@@ -1,6 +1,5 @@
 package com.kloudtek.ktcli;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import picocli.CommandLine;
 
@@ -32,6 +31,10 @@ public abstract class CliCommand<T extends CliCommand> {
     protected void saveConfig() {
         ObjectNode jsonNode = CliHelper.getObjectMapper().valueToTree(this);
         config.setAll(jsonNode);
+    }
+
+    public T getParent() {
+        return parent;
     }
 
     public List<CliCommand<?>> getExtraSubCommands() {

@@ -20,10 +20,7 @@ import org.slf4j.spi.LocationAwareLogger;
 import java.io.Console;
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class CliHelper {
     public static final String SUBCOMMANDS = "subcommands";
@@ -32,8 +29,6 @@ public class CliHelper {
     public static final String PROFILES = "profiles";
     @Option(names = {"-h", "--help"}, description = "Display command usage", usageHelp = true)
     private boolean help;
-    @Option(names = {"-x", "--xxx"}, description = "Display command usage", arity = "3")
-    private List<String> xx;
     @Option(names = {"-q", "--quiet"}, description = "Suppress informative message")
     private boolean quiet;
     @Option(names = {"-v", "--verbose"}, description = "Verbose logging (overrides -q)")
@@ -138,7 +133,7 @@ public class CliHelper {
         }
     }
 
-    public void executeCommand(String[] args) throws CommandLine.ExecutionException {
+    public void executeCommand(String... args) throws CommandLine.ExecutionException {
         init(commandLine, null, profileConfig);
         List<CommandLine> parsedCmdLines = commandLine.parse(args);
         if (CommandLine.printHelpIfRequested(parsedCmdLines, System.out, ansi)) {
@@ -189,6 +184,13 @@ public class CliHelper {
                         CommandLine subCmdLine = new CommandLine(subCommand);
                         String subCmdName = annotation.name();
                         commandLine.addSubcommand(subCmdName, subCmdLine);
+                    }
+                }
+                List<CommandLine.ArgSpec> reqArgs = cliCmd.commandLine.getCommandSpec().requiredArgs();
+                for (CommandLine.ArgSpec argSpec : new ArrayList<>(reqArgs)) {
+                    if( argSpec.getter().get() != null ) {
+                        reqArgs.remove(argSpec);
+                        argSpec.required(false);
                     }
                 }
                 for (Map.Entry<String, CommandLine> subCmdEntry : commandLine.getSubcommands().entrySet()) {

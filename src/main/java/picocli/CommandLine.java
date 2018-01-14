@@ -2590,7 +2590,7 @@ public class CommandLine {
 
         /** Returns the list of required options and positional parameters configured for this command.
          * @return an immutable list of the required options and positional parameters for this command. */
-        public List<ArgSpec> requiredArgs() { return Collections.unmodifiableList(requiredArgs); }
+        public List<ArgSpec> requiredArgs() { return requiredArgs; }
 
         /** Returns the String to use as the program name in the synopsis line of the help message.
          * {@link #DEFAULT_COMMAND_NAME} by default, initialized from {@link Command#name()} if defined. */

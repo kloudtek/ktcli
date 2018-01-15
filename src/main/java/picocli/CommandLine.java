@@ -15,74 +15,34 @@
  */
 package picocli;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.LineNumberReader;
-import java.io.PrintStream;
-import java.io.StreamTokenizer;
+import picocli.CommandLine.Help.Ansi.IStyle;
+import picocli.CommandLine.Help.Ansi.Style;
+import picocli.CommandLine.Help.Ansi.Text;
+
+import java.io.*;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.lang.reflect.WildcardType;
+import java.lang.reflect.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.NetworkInterface;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
+import java.net.*;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
-import java.sql.Connection;
-import java.sql.Driver;
-import java.sql.DriverManager;
-import java.sql.Time;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.text.BreakIterator;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Currency;
+import java.util.*;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.Stack;
-import java.util.TimeZone;
-import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
-import picocli.CommandLine.Help.Ansi.IStyle;
-import picocli.CommandLine.Help.Ansi.Style;
-import picocli.CommandLine.Help.Ansi.Text;
-
 import static java.util.Locale.ENGLISH;
 import static picocli.CommandLine.ArgSpecBuilder.abbreviate;
-import static picocli.CommandLine.Help.Column.Overflow.SPAN;
-import static picocli.CommandLine.Help.Column.Overflow.TRUNCATE;
-import static picocli.CommandLine.Help.Column.Overflow.WRAP;
+import static picocli.CommandLine.Help.Column.Overflow.*;
 
 /**
  * <p>
@@ -2203,6 +2163,11 @@ public class CommandLine {
         private static boolean initFromAnnotatedFields(Object scope, Class<?> cls, CommandSpec receiver, IFactory factory) {
             boolean result = false;
             for (Field field : cls.getDeclaredFields()) {
+                try {
+                    field.setAccessible(true);
+                } catch (SecurityException e) {
+                    //
+                }
                 if (isMixin(field))    {
                     receiver.addMixin(mixinName(field), buildMixinForField(field, scope, factory));
                     result = true;

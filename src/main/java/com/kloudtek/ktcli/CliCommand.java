@@ -1,6 +1,7 @@
 package com.kloudtek.ktcli;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.jetbrains.annotations.NotNull;
 import picocli.CommandLine;
 
 import java.util.Collections;
@@ -15,22 +16,28 @@ public abstract class CliCommand<T extends CliCommand> {
     public CliCommand() {
     }
 
-    protected void init(CliHelper cli, CommandLine commandLine, T parent, ObjectNode cfg) {
+    protected void init(CliHelper cli, CommandLine commandLine, T parent) {
         this.cli = cli;
         this.commandLine = commandLine;
         this.parent = parent;
-        config = cfg;
     }
 
-    protected void loadConfig() throws Exception {
-        if (config != null) {
-            CliHelper.getObjectMapper().readerForUpdating(this).readValue(config);
-        }
+    public CommandLine getCommandLine() {
+        return commandLine;
+    }
+
+    protected void loadConfig(@NotNull ObjectNode cfg) throws Exception {
+        this.config = cfg;
+        CliHelper.getObjectMapper().readerForUpdating(this).readValue(config);
     }
 
     protected void saveConfig() {
         ObjectNode jsonNode = CliHelper.getObjectMapper().valueToTree(this);
-        config.setAll(jsonNode);
+        if (config != null) {
+            config.setAll(jsonNode);
+        } else {
+            config = jsonNode;
+        }
     }
 
     public T getParent() {

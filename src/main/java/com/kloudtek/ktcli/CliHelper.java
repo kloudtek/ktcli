@@ -12,12 +12,16 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.spi.LocationAwareLogger;
 import picocli.CommandLine;
+import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.Console;
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
 
 public class CliHelper {
     public static final String SUBCOMMANDS = "subcommands";
@@ -86,9 +90,6 @@ public class CliHelper {
                 profile = DEFAULT;
                 profileConfig = config.putObject(PROFILES).putObject(DEFAULT);
             }
-            // Reparsing the command to update defaults
-            commandLine = new CommandLine(command);
-            commandLine.addMixin("cliHelper", this);
         } catch (IOException e) {
             throw new UserDisplayableException("Unable to read configuration file: " + e.getMessage(), e);
         }
@@ -145,15 +146,7 @@ public class CliHelper {
     }
 
     public void parseAndExecute(String... args) throws CommandLine.ExecutionException {
-        commandLine = new CommandLine(command);
-        if (commandLine.getCommandName().equals("<main class>")) {
-            throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command and must have a name specified");
-        }
-        if (configFile == null) {
-            configFile = new File(System.getProperty("user.home") + File.separator + "." + commandLine.getCommandName());
-        }
-        commandLine.addMixin("cliHelper", this);
-        init(commandLine, null, profileConfig);
+        init(command, null, profileConfig);
         List<CommandLine> parsedCmdLines = commandLine.parse(args);
         if (CommandLine.printHelpIfRequested(parsedCmdLines, System.out, ansi)) {
             return;
@@ -185,48 +178,49 @@ public class CliHelper {
     }
 
     @SuppressWarnings("unchecked")
-    private void init(@NotNull CommandLine commandLine, @Nullable CliCommand parent, @Nullable ObjectNode cfg) {
+    private void init(@NotNull CliCommand commandObj, @Nullable CliCommand parent, @NotNull ObjectNode cfg) {
         try {
-            Object commandObj = commandLine.getCommand();
-            if (commandObj instanceof CliCommand) {
-                CliCommand cliCmd = (CliCommand) commandObj;
-                cliCmd.init(this, commandLine, parent, cfg);
-                cliCmd.loadConfig();
-                List<CliCommand> subModules = cliCmd.getExtraSubCommands();
-                if (!subModules.isEmpty()) {
-                    for (CliCommand subCommand : subModules) {
-                        CommandLine.Command annotation = subCommand.getClass().getAnnotation(CommandLine.Command.class);
-                        if (annotation == null) {
-                            throw new UserDisplayableException("Command is missing annotation: " + subCommand.getClass().getName());
-                        }
-                        CommandLine subCmdLine = new CommandLine(subCommand);
-                        String subCmdName = annotation.name();
-                        commandLine.addSubcommand(subCmdName, subCmdLine);
-                    }
-                }
-                List<CommandLine.ArgSpec> reqArgs = cliCmd.commandLine.getCommandSpec().requiredArgs();
-                for (CommandLine.ArgSpec argSpec : new ArrayList<>(reqArgs)) {
-                    if (argSpec.getter().get() != null) {
-                        reqArgs.remove(argSpec);
-                        argSpec.required(false);
-                    }
-                }
-                for (Map.Entry<String, CommandLine> subCmdEntry : commandLine.getSubcommands().entrySet()) {
+            // Ugh this whole class gotten really messy due to picocli evaluating default values at constructor time rather than parse time
+            // consider adding support to picocli to refresh default values. This would also allow to support subcommands
+            // created by the annotation
+            commandObj.loadConfig(cfg);
+            CommandLine newCommandLine = new CommandLine(commandObj);
+            commandObj.init(this, newCommandLine, parent);
+            if (!newCommandLine.getSubcommands().isEmpty()) {
+                throw new IllegalStateException("Subcommands shouldn't be setup using @Command annotation, use CliCommand.getExtraSubCommands() instead");
+            }
+            if (parent != null) {
+                parent.getCommandLine().addSubcommand(newCommandLine.getCommandName(), newCommandLine);
+            } else {
+                newCommandLine.addMixin("cliHelper", this);
+                commandLine = newCommandLine;
+            }
+            List<CliCommand> subModules = commandObj.getExtraSubCommands();
+            if (!subModules.isEmpty()) {
+                for (CliCommand subCommand : subModules) {
                     ObjectNode subCommandsConfigNode = (ObjectNode) cfg.get(SUBCOMMANDS);
                     if (subCommandsConfigNode == null) {
                         subCommandsConfigNode = cfg.putObject(SUBCOMMANDS);
                     }
-                    CommandLine subCmdLine = subCmdEntry.getValue();
-                    ObjectNode subCmdConfigNode = (ObjectNode) subCommandsConfigNode.get(subCmdLine.getCommandName());
-                    if (subCmdConfigNode == null) {
-                        subCmdConfigNode = subCommandsConfigNode.putObject(subCmdLine.getCommandName());
+                    String commandName = getCommandName(commandObj);
+                    ObjectNode cfgNode = (ObjectNode) subCommandsConfigNode.get(commandName);
+                    if (cfgNode == null) {
+                        cfgNode = subCommandsConfigNode.putObject(commandName);
                     }
-                    init(subCmdLine, cliCmd, subCmdConfigNode);
+                    init(subCommand, commandObj, cfgNode);
                 }
             }
         } catch (Exception e) {
             throw new UserDisplayableException("Error loading config: " + e.getMessage(), e);
         }
+    }
+
+    private static String getCommandName(@NotNull CliCommand commandObj) {
+        Command annotation = commandObj.getClass().getAnnotation(Command.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Subcommand " + commandObj.getClass().getName() + " isn't annotation with @Command");
+        }
+        return annotation.name();
     }
 
 
@@ -348,6 +342,15 @@ public class CliHelper {
         }
         if (cliHelper.configFile != null) {
             configFile = cliHelper.configFile;
+        } else {
+            Command cmdAno = command.getClass().getAnnotation(Command.class);
+            if (cmdAno == null) {
+                throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command");
+            }
+            if (cmdAno.name().equals("<main class>")) {
+                throw new IllegalArgumentException("Command class " + command.getClass().getName() + " @Command and must have a name specified");
+            }
+            configFile = new File(System.getProperty("user.home") + File.separator + "." + cmdAno.name() + ".cfg");
         }
         setupLogging(cliHelper);
     }

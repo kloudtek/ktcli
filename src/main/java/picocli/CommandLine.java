@@ -117,6 +117,7 @@ public class CommandLine {
     private List<String> unmatchedArguments = new ArrayList<String>();
     private boolean usageHelpRequested;
     private boolean versionHelpRequested;
+    private boolean ignoreRequired;
 
     /**
      * Constructs a new {@code CommandLine} interpreter with the specified object and a default subcommand factory.
@@ -251,6 +252,46 @@ public class CommandLine {
     public CommandLine getParent() {
         CommandSpec parent = getCommandSpec().parent();
         return parent == null ? null : parent.commandLine();
+    }
+
+    public void refreshDefaultValues() {
+        CommandSpec commandSpec = getCommandSpec();
+        for (OptionSpec optionSpec : commandSpec.options()) {
+            try {
+                Object newDefaultValue = optionSpec.getter().get();
+                Object oldDefaultValue = optionSpec.defaultValue();
+                if (newDefaultValue != null && oldDefaultValue == null && Boolean.TRUE.equals(commandSpec.notRequiredWithDefault())) {
+                    optionSpec.required(false);
+                    optionSpec.requiredCancelledByDefaultValue(true);
+                    commandSpec.requiredArgs.remove(optionSpec);
+                } else if (newDefaultValue == null && oldDefaultValue != null && optionSpec.requiredCancelledByDefaultValue()) {
+                    optionSpec.required(true);
+                    optionSpec.requiredCancelledByDefaultValue(false);
+                    commandSpec.requiredArgs.add(optionSpec);
+                }
+                optionSpec.defaultValue(newDefaultValue);
+            } catch (Exception e) {
+                tracer.warn("Error while refreshing default values %s%n", e.getMessage());
+            }
+        }
+        for (CommandLine commandLine : getSubcommands().values()) {
+            commandLine.refreshDefaultValues();
+        }
+    }
+
+    /**
+     * Check if required validation has been disabled
+     */
+    public boolean isIgnoreRequired() {
+        return ignoreRequired;
+    }
+
+    /**
+     * Set to true if you wish required validation to be disabled
+     */
+    public CommandLine setIgnoreRequired(boolean ignoreRequired) {
+        this.ignoreRequired = ignoreRequired;
+        return this;
     }
 
     /** Returns the annotated user object that this {@code CommandLine} instance was constructed with.
@@ -2243,11 +2284,7 @@ public class CommandLine {
             result.splitRegex(option.split());
             result.hidden(option.hidden());
             result.converters(DefaultFactory.createConverter(factory, option.converter()));
-            Object defaultValue = getDefaultValue(scope, field);
-            if(defaultValue != null && !option.defaultValueMask().isEmpty()) {
-                defaultValue = option.defaultValueMask();
-            }
-            result.defaultValue(defaultValue);
+            result.defaultValueMask(option.defaultValueMask());
             initCommon(result, scope, field);
             return result;
         }
@@ -2277,13 +2314,13 @@ public class CommandLine {
             result.splitRegex(parameters.split());
             result.hidden(parameters.hidden());
             result.converters(DefaultFactory.createConverter(factory, parameters.converter()));
-            result.defaultValue(getDefaultValue(scope, field));
             initCommon(result, scope, field);
             return result;
         }
         private static void initCommon(ArgSpec result, Object scope, Field field) {
             field.setAccessible(true);
             result.type(field.getType()); // field type
+            result.defaultValue(getDefaultValue(scope, field));
             result.withToString(abbreviate("field " + field.toGenericString()));
             result.getter(new FieldGetter(scope, field));
             result.setter(new FieldSetter(scope, field));
@@ -2506,9 +2543,11 @@ public class CommandLine {
                 if (existing != null && !existing.equals(option)) {
                     throw DuplicateOptionAnnotationsException.create(name, option, existing);
                 }
-                if (name.length() == 2 && name.startsWith("-")) { posixOptionsByKeyMap.put(name.charAt(1), option); }
+                if (name.length() == 2 && name.startsWith("-")) { posixOptionsByKeyMap.put(name.charAt(1), option);
+                }
             }
-            if( Boolean.TRUE.equals(notRequiredWithDefault) && option.defaultValue() != null ) {
+            if (option.required() && Boolean.TRUE.equals(notRequiredWithDefault) && option.defaultValue() != null) {
+                option.requiredCancelledByDefaultValue(true);
                 option.required(false);
             }
             if (option.required()) { requiredArgs.add(option); }
@@ -2788,6 +2827,7 @@ public class CommandLine {
     public abstract static class ArgSpec<T extends ArgSpec> {
         private Range arity;
         private String[] description;
+        private boolean requiredCancelledByDefaultValue;
         private boolean required;
         private String paramLabel;
         private String splitRegex;
@@ -2796,6 +2836,7 @@ public class CommandLine {
         private Class[] auxiliaryTypes;
         private ITypeConverter<?>[] converters;
         private Object defaultValue;
+        private String defaultValueMask;
         private String toString;
         private IGetter getter;
         private ISetter setter;
@@ -2952,27 +2993,64 @@ public class CommandLine {
         public T type(Class<?> propertyType)         { this.type = propertyType; return self(); }
 
         /** Sets the default value of this option or positional parameter to the specified value. */
-        public T defaultValue(Object defaultValue)   { this.defaultValue = defaultValue; return self(); }
+        public T defaultValue(Object defaultValue) {
+            if (defaultValue != null && defaultValueMask != null && defaultValueMask.length() > 0) {
+                this.defaultValue = defaultValueMask;
+            } else {
+                this.defaultValue = defaultValue;
+            }
+            return self();
+        }
 
         /** Sets the {@link IGetter} that is responsible for getting the value of this argument to the specified value. */
         public T getter(IGetter getter)              { this.getter = getter; return self(); }
         /** Sets the {@link ISetter} that is responsible for setting the value of this argument to the specified value. */
-        public T setter(ISetter setter)              { this.setter = setter; return self(); }
+        public T setter(ISetter setter)              { this.setter = setter;
+            return self();
+        }
 
-        /** Sets the string respresentation of this option or positional parameter to the specified value. */
+        /**
+         * Returns indicates if the required field was switch to false because of a default value combined with {@link Command#notRequiredWithDefault()}
+         */
+        public boolean requiredCancelledByDefaultValue() {
+            return requiredCancelledByDefaultValue;
+        }
+
+        /**
+         * Sets if the required field was switch to false because of a default value combined with {@link Command#notRequiredWithDefault()}
+         */
+        public void requiredCancelledByDefaultValue(boolean requiredCancelledByDefaultValue) {
+            this.requiredCancelledByDefaultValue = requiredCancelledByDefaultValue;
+        }
+
+        /** Sets the string representation of this option or positional parameter to the specified value. */
         public T withToString(String toString)       { this.toString = toString; return self(); }
 
         /** Returns a string respresentation of this option or positional parameter. */
         public String toString() { return toString; }
 
         private String[] splitValue(String value) {
-            return splitRegex().length() == 0 ? new String[] {value} : value.split(splitRegex());
+            return splitRegex().length() == 0 ? new String[]{value} : value.split(splitRegex());
         }
+
+        /**
+         * Gets the default value mask
+         */
+        public String defaultValueMask() {
+            return defaultValueMask;
+        }
+
+        /**
+         * Sets the default value mask
+         */
+        public void defaultValueMask(String defaultValueMask) { this.defaultValueMask = defaultValueMask; }
+
         public boolean equals(Object obj) {
             if (obj == this) { return true; }
             if (!(obj instanceof ArgSpec)) { return false; }
             ArgSpec other = (ArgSpec) obj;
             boolean result = Assert.equals(this.defaultValue, other.defaultValue)
+                    && Assert.equals(this.defaultValueMask, other.defaultValueMask)
                     && Assert.equals(this.type, other.type)
                     && Assert.equals(this.arity, other.arity)
                     && Assert.equals(this.hidden, other.hidden)
@@ -2980,13 +3058,14 @@ public class CommandLine {
                     && Assert.equals(this.required, other.required)
                     && Assert.equals(this.splitRegex, other.splitRegex)
                     && Arrays.equals(this.description, other.description)
-                    && Arrays.equals(this.auxiliaryTypes, other.auxiliaryTypes)
-                    ;
+                    && Arrays.equals(this.auxiliaryTypes, other.auxiliaryTypes);
             return result;
         }
+
         public int hashCode() {
             return 17
                     + 37 * Assert.hashCode(defaultValue)
+                    + 37 * Assert.hashCode(defaultValueMask)
                     + 37 * Assert.hashCode(type)
                     + 37 * Assert.hashCode(arity)
                     + 37 * Assert.hashCode(hidden)
@@ -3090,6 +3169,7 @@ public class CommandLine {
 
         /** Sets whether this option allows the user to request version information.*/
         public OptionSpec versionHelp(boolean versionHelp) { this.versionHelp = versionHelp; return self(); }
+
         public boolean equals(Object obj) {
             if (obj == this) { return true; }
             if (!(obj instanceof OptionSpec)) { return false; }
@@ -3354,9 +3434,9 @@ public class CommandLine {
                 String arg = offendingArgIndex >= 0 && offendingArgIndex < originalArgs.length ? originalArgs[offendingArgIndex] : "?";
                 throw ParameterException.create(CommandLine.this, ex, arg, offendingArgIndex, originalArgs);
             }
-            if (!isAnyHelpRequested() && !required.isEmpty()) {
+            if (!isAnyHelpRequested() && !required.isEmpty() && !ignoreRequired) {
                 for (ArgSpec missing : required) {
-                    if (missing.isOption()) {
+                    if (missing.isOption() ) {
                         throw MissingParameterException.create(CommandLine.this, required, commandSpec.separator());
                     } else {
                         assertNoMissingParameters(missing, missing.arity().min, argumentStack);

@@ -49,6 +49,6 @@ public abstract class CliCommand<T extends CliCommand> {
     }
 
     protected void execute() throws Exception {
-        commandLine.usage(System.out);
+        cli.printUsage(this);
     }
 }

@@ -61,7 +61,7 @@ public class ConfigTests {
     @Test
     public void testSubCommandsSaveConfig() throws IOException {
         createConfig();
-        new CliHelper(new ParentCmd()).initAndRunNoExceptionHandling("-c=" + tmpConfig.getAbsolutePath(), "-sc", "-a=foo", "childcmd", "-b=bar");
+        new CliHelper(ParentCmd::new).initAndRunNoExceptionHandling("-c=" + tmpConfig.getAbsolutePath(), "-sc", "-a=foo", "childcmd", "-b=bar");
         assertTrue(tmpConfig.exists());
         String json = IOUtils.toString(tmpConfig);
         Map jsonMap = CliHelper.getObjectMapper().readValue(json, new TypeReference<Map<String, Object>>() {
@@ -72,9 +72,9 @@ public class ConfigTests {
     @Test
     public void testSubCommandsLoadConfig() throws IOException {
         createConfig(CliHelper.getObjectMapper().writeValueAsString(createTestConfigMap()));
-        ParentCmd parent = new ParentCmd();
-        CliHelper cliHelper = new CliHelper(parent);
+        CliHelper<ParentCmd> cliHelper = new CliHelper<>(ParentCmd::new);
         cliHelper.initAndRunNoExceptionHandling("-c=" + tmpConfig.getAbsolutePath(), "childcmd");
+        ParentCmd parent = cliHelper.getCommand();
         assertEquals("foo", parent.a);
         ChildCmd childcmd = cliHelper.getCommandLine().getSubcommands().get("childcmd").getCommand();
         assertEquals("bar", childcmd.b);

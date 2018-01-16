@@ -7,9 +7,9 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kloudtek.ktcli.util.VerySimpleLogger;
+import com.kloudtek.util.UnexpectedException;
 import com.kloudtek.util.UserDisplayableException;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.spi.LocationAwareLogger;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -23,13 +23,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
-public class CliHelper {
+public class CliHelper<T extends CliCommand<?>> {
     public static final String SUBCOMMANDS = "subcommands";
     public static final String DEFAULT_PROFILE = "defaultProfile";
     public static final String DEFAULT = "default";
     public static final String PROFILES = "profiles";
-    @Option(names = {"-h", "--help"}, description = "Display command usage", usageHelp = true)
-    private boolean help;
     @Option(names = {"-q", "--quiet"}, description = "Suppress informative message")
     private boolean quiet;
     @Option(names = {"-v", "--verbose"}, description = "Verbose logging (overrides -q)")
@@ -38,16 +36,17 @@ public class CliHelper {
     private boolean saveConfig;
     @Option(names = {"-p", "--profile"}, description = "Configuration profile")
     private String profile;
-    @Option(names = {"-c", "--config"}, description = "Configuration File")
+    @Option(names = {"-c", "--config"}, description = "Configuration File (note: this MUST be the first parameter, and be in the format of -c=<file> or --config=<file>)")
     private File configFile;
     protected ObjectNode config;
     private ObjectNode profileConfig;
     private static ObjectMapper objectMapper;
     private static Console console;
     private static Scanner scanner;
-    private CliCommand<?> command;
+    private T command;
     private CommandLine commandLine;
     private CommandLine.Help.Ansi ansi = CommandLine.Help.Ansi.AUTO;
+    private CommandCreator commandCreator;
 
     static {
         objectMapper = new ObjectMapper();
@@ -65,10 +64,14 @@ public class CliHelper {
     }
 
     protected CliHelper() {
+        if (console == null) {
+            ansi = CommandLine.Help.Ansi.OFF;
+        }
     }
 
-    public CliHelper(CliCommand<?> command) {
-        this.command = command;
+    public CliHelper(CommandCreator commandCreator) {
+        this();
+        this.commandCreator = commandCreator;
     }
 
     // Configuration functions
@@ -139,14 +142,28 @@ public class CliHelper {
      * @param args Arguments
      */
     public void initAndRunNoExceptionHandling(String... args) {
+        initAndRunNoExceptionHandling(null, args);
+    }
+
+    /**
+     * This will call {@link #parseBasicOptions(String[])}, {@link #loadConfigFile()},
+     * {@link #parseAndExecute(String[])}, {@link #writeConfig()}.
+     *
+     * @param args Arguments
+     */
+    public void initAndRunNoExceptionHandling(CommandClassInitializer<T> initializer, String... args) {
         parseBasicOptions(args);
+        if (initializer != null) {
+            initializer.initialize(command);
+        }
         loadConfigFile();
         parseAndExecute(args);
         writeConfig();
     }
 
     public void parseAndExecute(String... args) throws CommandLine.ExecutionException {
-        init(command, null, profileConfig);
+        init(commandLine, profileConfig);
+        commandLine.refreshDefaultValues();
         List<CommandLine> parsedCmdLines = commandLine.parse(args);
         if (CommandLine.printHelpIfRequested(parsedCmdLines, System.out, ansi)) {
             return;
@@ -178,40 +195,29 @@ public class CliHelper {
     }
 
     @SuppressWarnings("unchecked")
-    private void init(@NotNull CliCommand commandObj, @Nullable CliCommand parent, @NotNull ObjectNode cfg) {
+    private void init(@NotNull CommandLine commandLine, @NotNull ObjectNode cfg) {
         try {
-            // Ugh this whole class gotten really messy due to picocli evaluating default values at constructor time rather than parse time
-            // consider adding support to picocli to refresh default values. This would also allow to support subcommands
-            // created by the annotation
-            commandObj.loadConfig(cfg);
-            CommandLine newCommandLine = new CommandLine(commandObj);
-            commandObj.init(this, newCommandLine, parent);
-            if (!newCommandLine.getSubcommands().isEmpty()) {
-                throw new IllegalStateException("Subcommands shouldn't be setup using @Command annotation, use CliCommand.getExtraSubCommands() instead");
-            }
-            if (parent != null) {
-                parent.getCommandLine().addSubcommand(newCommandLine.getCommandName(), newCommandLine);
-            } else {
-                newCommandLine.addMixin("cliHelper", this);
-                commandLine = newCommandLine;
-            }
-            List<CliCommand> subModules = commandObj.getExtraSubCommands();
-            if (!subModules.isEmpty()) {
-                for (CliCommand subCommand : subModules) {
-                    ObjectNode subCommandsConfigNode = (ObjectNode) cfg.get(SUBCOMMANDS);
-                    if (subCommandsConfigNode == null) {
-                        subCommandsConfigNode = cfg.putObject(SUBCOMMANDS);
-                    }
-                    String commandName = getCommandName(commandObj);
-                    ObjectNode cfgNode = (ObjectNode) subCommandsConfigNode.get(commandName);
-                    if (cfgNode == null) {
-                        cfgNode = subCommandsConfigNode.putObject(commandName);
-                    }
-                    init(subCommand, commandObj, cfgNode);
-                }
+            CliCommand<?> cmd = commandLine.getCommand();
+            loadExtraSubCommands(commandLine);
+            cmd.loadConfig(cfg);
+            cmd.init(this, commandLine, commandLine.getParent() != null ? commandLine.getParent().getCommand() : null);
+            for (CommandLine subCmdLine : commandLine.getSubcommands().values()) {
+                init(subCmdLine, getSubCommandConfigNode(cfg, subCmdLine.getCommandName()));
             }
         } catch (Exception e) {
             throw new UserDisplayableException("Error loading config: " + e.getMessage(), e);
+        }
+    }
+
+    private void loadExtraSubCommands(@NotNull CommandLine commandLine) {
+        CliCommand<?> cmd = commandLine.getCommand();
+        List<CliCommand<?>> subModules = cmd.getExtraSubCommands();
+        if (!subModules.isEmpty()) {
+            for (CliCommand subCommand : subModules) {
+                CommandLine subCmdLine = new CommandLine(subCommand);
+                commandLine.addSubcommand(getCommandName(subCommand), subCmdLine);
+                loadExtraSubCommands(subCmdLine);
+            }
         }
     }
 
@@ -222,7 +228,6 @@ public class CliHelper {
         }
         return annotation.name();
     }
-
 
     // JSON Functions
 
@@ -332,27 +337,28 @@ public class CliHelper {
      *
      * @param args arguments
      */
-    public void parseBasicOptions(@NotNull String... args) {
-        CliHelper cliHelper = new CliHelper();
-        try {
-            CommandLine cl = new CommandLine(cliHelper);
-            cl.parse(args);
-        } catch (Exception e) {
-            // that's fine, we only want the basic options
-        }
+    public CliHelper<T> parseBasicOptions(@NotNull String... args) {
+        CliCommand<?> cmd = commandCreator.create();
+        CommandLine cmdLine = new CommandLine(cmd);
+        loadExtraSubCommands(cmdLine);
+        cmdLine.setIgnoreRequired(true);
+        CliHelper<T> cliHelper = new CliHelper<>();
+        cmdLine.addMixin("cliHelper", cliHelper);
+        cmdLine.parse(args);
+        setupLogging(cliHelper);
         if (cliHelper.configFile != null) {
             configFile = cliHelper.configFile;
         } else {
-            Command cmdAno = command.getClass().getAnnotation(Command.class);
-            if (cmdAno == null) {
-                throw new IllegalArgumentException("Command class " + command.getClass().getName() + " must be annotated with @Command");
-            }
-            if (cmdAno.name().equals("<main class>")) {
+            String commandName = cmdLine.getCommandName();
+            if (commandName.equals("<main class>")) {
                 throw new IllegalArgumentException("Command class " + command.getClass().getName() + " @Command and must have a name specified");
             }
-            configFile = new File(System.getProperty("user.home") + File.separator + "." + cmdAno.name() + ".cfg");
+            configFile = new File(System.getProperty("user.home") + File.separator + "." + commandName + ".cfg");
         }
-        setupLogging(cliHelper);
+        command = (T) commandCreator.create();
+        commandLine = new CommandLine(command);
+        commandLine.addMixin("cliHelper", this);
+        return cliHelper;
     }
 
     public boolean isQuiet() {
@@ -399,7 +405,7 @@ public class CliHelper {
         return profileConfig;
     }
 
-    public CliCommand<?> getCommand() {
+    public T getCommand() {
         return command;
     }
 
@@ -409,5 +415,42 @@ public class CliHelper {
 
     public static ObjectMapper getObjectMapper() {
         return objectMapper;
+    }
+
+    public <T extends CliCommand> void printUsage(CliCommand command) {
+        command.getCommandLine().usage(System.out, ansi);
+    }
+
+    private static ObjectNode getSubCommandConfigNode(@NotNull ObjectNode cfg, String subCmdName) {
+        ObjectNode subCommandsConfigNode = (ObjectNode) cfg.get(SUBCOMMANDS);
+        if (subCommandsConfigNode == null) {
+            subCommandsConfigNode = cfg.putObject(SUBCOMMANDS);
+        }
+        ObjectNode cfgNode = (ObjectNode) subCommandsConfigNode.get(subCmdName);
+        if (cfgNode == null) {
+            cfgNode = subCommandsConfigNode.putObject(subCmdName);
+        }
+        return cfgNode;
+    }
+
+    public interface CommandCreator {
+        CliCommand<?> create();
+    }
+
+    public class ClassCommandCreator implements CommandCreator {
+        private Class<? extends CliCommand<?>> cmdClass;
+
+        public ClassCommandCreator(Class<? extends CliCommand<?>> cmdClass) {
+            this.cmdClass = cmdClass;
+        }
+
+        @Override
+        public CliCommand<?> create() {
+            try {
+                return cmdClass.newInstance();
+            } catch (Exception e) {
+                throw new UnexpectedException(e);
+            }
+        }
     }
 }

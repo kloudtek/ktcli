@@ -84,7 +84,9 @@ public class CliHelper<T extends CliCommand<?>> {
                     throw new UserDisplayableException("Invalid configuration file " + configFile.getPath() + " is not a json object");
                 }
                 config = (ObjectNode) configNode;
-                profile = getJsonString(config, DEFAULT_PROFILE, DEFAULT);
+                if( profile == null ) {
+                    profile = getJsonString(config, DEFAULT_PROFILE, DEFAULT);
+                }
                 ObjectNode profiles = getJsonObject(config, PROFILES);
                 profileConfig = getJsonObject(profiles, profile);
             } else {
